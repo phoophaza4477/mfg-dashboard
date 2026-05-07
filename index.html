@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#f5a623"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="MFG Dashboard"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <title>Manufacturing Dashboard</title>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, query, limitToLast }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyArke6GruF2_tXpJzp137qLZotphhE1YSA",
+      authDomain: "counting-project-ce68b.firebaseapp.com",
+      databaseURL: "https://counting-project-ce68b-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "counting-project-ce68b",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+
+    // ── State ──────────────────────────────────────────────
+    let currentCount     = 0;
+    let completedPacks   = 0;
+    const TARGET         = 50;
+    let lastObjectStatus = null;
+
+    function handleDetection(objectStatus) {
+      if (objectStatus === lastObjectStatus) return;
+      lastObjectStatus = objectStatus;
+
+      if (objectStatus === "Detected") {
+        currentCount++;
+        if (currentCount >= TARGET) {
+          completedPacks++;
+          currentCount = 0;
+          showPackComplete();
+          sendNotification();
+        }
+      }
+      updateCountUI();
+    }
+
+    function showPackComplete() {
+      const banner  = document.getElementById("packBanner");
+      const overlay = document.getElementById("overlay");
+      document.getElementById("bannerPackNum").textContent =
+        `แพ็คที่ ${completedPacks} · ครบ 50 ชิ้นแล้ว · เริ่มนับใหม่...`;
+      overlay.style.display = "block";
+      banner.style.display  = "flex";
+      banner.style.animation = "none";
+      void banner.offsetWidth;
+      banner.style.animation = "popIn .4s ease";
+      setTimeout(() => {
+        banner.style.display  = "none";
+        overlay.style.display = "none";
+      }, 3500);
+    }
+
+    // Push Notification
+    async function sendNotification() {
+      if (!("Notification" in window)) return;
+      if (Notification.permission === "granted") {
+        new Notification("🎉 ครบ 1 แพ็คแล้ว!", {
+          body: `แพ็คที่ ${completedPacks} · ผลิตครบ 50 ชิ้น`,
+          icon: "icon-192.png",
+          badge: "icon-192.png",
+        });
+      }
+    }
+
+    // ขอสิทธิ์ Notification
+    async function requestNotificationPermission() {
+      if ("Notification" in window && Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+    }
+
+    function updateCountUI() {
+      const pct    = Math.round((currentCount / TARGET) * 100);
+      const circum = 2 * Math.PI * 45;
+      const offset = circum * (1 - pct / 100);
+
+      document.getElementById("detectedCount").textContent  = currentCount;
+      document.getElementById("completedPacks").textContent = completedPacks;
+      document.getElementById("detectedPct").textContent    = pct + "%";
+      document.getElementById("progressBar").style.width    = pct + "%";
+      document.getElementById("totalItems").textContent     =
+        completedPacks * TARGET + currentCount;
+
+      const ring = document.getElementById("ringFill");
+      if (ring) {
+        ring.style.strokeDasharray  = circum;
+        ring.style.strokeDashoffset = offset;
+        ring.style.stroke = pct >= 90 ? "#34c759" : "#f5a623";
+      }
+    }
+
+    // ── Firebase: latest ──────────────────────────────────
+    onValue(ref(db, "/sensorData/latest"), (snap) => {
+      const d = snap.val();
+      if (!d) return;
+
+      const detected = d.objectStatus === "Detected";
+
+      const dot        = document.getElementById("statusDot");
+      const statusText = document.getElementById("statusText");
+      const statusCard = document.getElementById("statusCard");
+      const statusIcon = document.getElementById("statusIcon");
+      const statusSub  = document.getElementById("statusSub");
+
+      if (detected) {
+        dot.className          = "dot dot-running";
+        statusText.textContent = "RUNNING";
+        statusText.className   = "status-label running";
+        statusCard.className   = "status-card running-card";
+        statusIcon.textContent = "⚙️";
+        statusSub.textContent  = "เครื่องจักรกำลังทำงาน · ตรวจพบวัตถุ";
+      } else {
+        dot.className          = "dot dot-idle";
+        statusText.textContent = "IDLE";
+        statusText.className   = "status-label idle";
+        statusCard.className   = "status-card idle-card";
+        statusIcon.textContent = "💤";
+        statusSub.textContent  = "ไม่พบวัตถุ · รอการทำงาน";
+      }
+
+      const tv = d.temperature;
+      document.getElementById("tempVal").textContent =
+        tv !== undefined ? parseFloat(tv).toFixed(1) : "--";
+
+      const tempTag = document.getElementById("tempTag");
+      if (tv !== undefined) {
+        const t = parseFloat(tv);
+        if (t > 35)      { tempTag.className="tag tag-red";    tempTag.textContent="🔥 อุณหภูมิสูง"; }
+        else if (t > 30) { tempTag.className="tag tag-orange"; tempTag.textContent="⚠️ ค่อนข้างร้อน"; }
+        else             { tempTag.className="tag tag-green";  tempTag.textContent="✓ อุณหภูมิปกติ"; }
+      }
+
+      document.getElementById("lastUpdate").textContent = d.timestamp || "--";
+      handleDetection(d.objectStatus);
+    });
+
+    // ── Firebase: logs ────────────────────────────────────
+    onValue(query(ref(db, "/sensorData/logs"), limitToLast(20)), (snap) => {
+      const data = snap.val();
+      if (!data) return;
+      const entries = Object.values(data).reverse();
+      const tbody   = document.getElementById("historyBody");
+      tbody.innerHTML = "";
+      entries.forEach((e, i) => {
+        const det = e.objectStatus === "Detected";
+        const tr  = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td style="font-size:11px;">${e.timestamp || "--"}</td>
+          <td><span class="badge ${det ? "badge-running" : "badge-idle"}">
+            ${det ? "⚙️ Detected" : "💤 Not Detected"}
+          </span></td>
+          <td>${e.temperature !== undefined
+            ? parseFloat(e.temperature).toFixed(1) + " °C" : "--"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    });
+
+    // ── Clock ─────────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("clock").textContent =
+        now.toLocaleTimeString("th-TH");
+      document.getElementById("dateDisplay").textContent =
+        now.toLocaleDateString("th-TH", {
+          weekday:"long", year:"numeric",
+          month:"long",   day:"numeric"
+        });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+    updateCountUI();
+
+    // Service Worker
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js")
+        .then(() => console.log("SW registered"))
+        .catch(e => console.log("SW error:", e));
+    }
+
+    // ขอสิทธิ์เมื่อโหลด
+    window.addEventListener("load", requestNotificationPermission);
+
+    // Bottom nav
+    window.showTab = function(tab) {
+      document.querySelectorAll(".tab-content").forEach(el => {
+        el.style.display = "none";
+      });
+      document.querySelectorAll(".nav-btn").forEach(el => {
+        el.classList.remove("active");
+      });
+      document.getElementById("tab-" + tab).style.display = "block";
+      document.getElementById("nav-" + tab).classList.add("active");
+    };
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+    :root {
+      --primary:   #f5a623;
+      --primary-l: #f7c06b;
+      --bg:        #fdf8f0;
+      --card:      #ffffff;
+      --border:    #eddcbf;
+      --text:      #3d3530;
+      --sub:       #9a8070;
+      --gold:      #8b5e1a;
+      --gold-l:    #b08040;
+    }
+
+    html, body {
+      font-family: "Segoe UI","Prompt",sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100%;
+      overflow-x: hidden;
+    }
+
+    /* Safe area for notch/home bar */
+    body {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg,#fffdf7,#fef3e2);
+      border-bottom: 2px solid var(--border);
+      padding: 12px 16px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 12px rgba(200,160,80,.12);
+      position: sticky; top:0; z-index:200;
+    }
+
+    .header-left { display:flex; align-items:center; gap:10px; }
+
+    .logo {
+      width:40px; height:40px;
+      background: linear-gradient(135deg,var(--primary),var(--primary-l));
+      border-radius:12px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:20px;
+      box-shadow:0 3px 10px rgba(245,166,35,.30);
+      flex-shrink:0;
+    }
+
+    .header-title h1 { font-size:15px; font-weight:700; color:var(--gold); }
+    .header-title p  { font-size:10px; color:var(--gold-l); margin-top:1px; }
+
+    .header-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+
+    .live-pill {
+      display:flex; align-items:center; gap:6px;
+      background:rgba(80,180,100,.12);
+      border:1px solid rgba(80,180,100,.35);
+      padding:5px 10px; border-radius:20px;
+    }
+    .dot { width:8px; height:8px; border-radius:50%; animation:blink 1.4s infinite; }
+    .dot-running { background:#34c759; }
+    .dot-idle    { background:#a0a0b0; animation:none; }
+
+    @keyframes blink {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:.4; transform:scale(1.3); }
+    }
+
+    .live-text  { font-size:11px; color:#2ea84a; font-weight:700; }
+    .clock-box  { text-align:right; }
+    .clock-box .time { font-size:16px; font-weight:700; color:var(--gold); }
+    .clock-box .date { font-size:9px;  color:var(--gold-l); }
+
+    /* ── Scroll Container ── */
+    .page-wrap {
+      overflow-y: auto;
+      height: calc(100vh - 60px - 65px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .container {
+      padding: 14px 14px 20px;
+      display: flex; flex-direction:column; gap:14px;
+    }
+
+    /* ── Tab Content ── */
+    .tab-content { display:none; }
+    #tab-home    { display:block; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius:16px;
+      padding: 16px;
+      box-shadow: 0 2px 10px rgba(180,130,60,.07);
+    }
+
+    .card-title {
+      font-size:10px; text-transform:uppercase;
+      letter-spacing:1.5px; color:var(--gold-l);
+      margin-bottom:12px;
+      display:flex; align-items:center; gap:6px;
+    }
+
+    /* ── KPI ── */
+    .kpi-num  { font-size:42px; font-weight:800; color:var(--text); line-height:1; }
+    .kpi-unit { font-size:14px; color:var(--gold-l); margin-left:3px; }
+    .kpi-sub  { font-size:12px; color:var(--sub); margin-top:5px; }
+
+    .tag {
+      display:inline-flex; align-items:center; gap:4px;
+      font-size:11px; padding:4px 9px; border-radius:10px;
+      margin-top:8px; font-weight:600;
+    }
+    .tag-green  { background:#e8f8ed; color:#2ea84a; }
+    .tag-red    { background:#fdecea; color:#d93025; }
+    .tag-orange { background:#fff3e0; color:#f57c00; }
+
+    /* ── Progress ── */
+    .progress-wrap { margin-top:12px; }
+    .progress-info {
+      display:flex; justify-content:space-between;
+      font-size:11px; color:var(--gold-l); margin-bottom:5px;
+    }
+    .progress-track {
+      height:10px; background:#f0e8d8;
+      border-radius:10px; overflow:hidden;
+    }
+    .progress-bar {
+      height:100%; border-radius:10px;
+      background:linear-gradient(90deg,var(--primary),var(--primary-l));
+      transition:width .6s ease;
+      width:0%;
+    }
+
+    /* ── Ring ── */
+    .ring-wrap { display:flex; justify-content:center; margin:8px 0 4px; }
+    .ring-outer { position:relative; width:110px; height:110px; }
+    .ring-svg { transform:rotate(-90deg); width:110px; height:110px; }
+    .ring-bg   { fill:none; stroke:#f0e8d8; stroke-width:10; }
+    .ring-fill {
+      fill:none; stroke:var(--primary); stroke-width:10;
+      stroke-linecap:round;
+      stroke-dasharray:283;
+      stroke-dashoffset:283;
+      transition:stroke-dashoffset .6s ease, stroke .4s;
+    }
+    .ring-center {
+      position:absolute; inset:0;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+    }
+    .ring-num   { font-size:28px; font-weight:800; color:var(--text); }
+    .ring-denom { font-size:12px; color:var(--gold-l); }
+
+    /* ── Status ── */
+    .status-card {
+      border-radius:14px; padding:18px 16px;
+      border:2px solid; transition:all .4s; text-align:center;
+    }
+    .running-card {
+      background:linear-gradient(135deg,#edfaf1,#d4f5e0);
+      border-color:#5ecf7f;
+      box-shadow:0 4px 18px rgba(80,200,120,.18);
+    }
+    .idle-card {
+      background:linear-gradient(135deg,#f4f4f8,#ebebf0);
+      border-color:#c0c0d0;
+    }
+    .status-icon-wrap { font-size:40px; margin-bottom:6px; }
+    .status-label {
+      display:block; font-size:22px; font-weight:800; letter-spacing:2px;
+    }
+    .status-label.running { color:#1a8f40; }
+    .status-label.idle    { color:#7070a0; }
+    .status-sub { font-size:11px; color:#9a9aaa; margin-top:4px; }
+
+    /* ── Machine Info Row ── */
+    .machine-info {
+      display:flex; align-items:center; gap:10px; margin-bottom:12px;
+    }
+    .machine-info .m-icon { font-size:26px; }
+    .machine-info .m-name { font-size:14px; font-weight:700; }
+    .machine-info .m-id   { font-size:11px; color:var(--gold-l); margin-top:2px; }
+
+    /* ── Operator ── */
+    .operator-card {
+      display:flex; align-items:center; gap:12px;
+      background:#fdf6ec; border:1px solid var(--border);
+      border-radius:12px; padding:12px; margin-bottom:10px;
+    }
+    .operator-card:last-child { margin-bottom:0; }
+    .avatar {
+      width:44px; height:44px; border-radius:50%;
+      background:linear-gradient(135deg,var(--primary),var(--primary-l));
+      display:flex; align-items:center; justify-content:center;
+      font-size:18px; font-weight:700; color:#fff; flex-shrink:0;
+    }
+    .op-name  { font-size:14px; font-weight:700; }
+    .op-role  { font-size:11px; color:var(--gold-l); margin-top:2px; }
+    .op-status-on  { font-size:10px; color:#34c759; margin-top:3px; }
+    .op-status-off { font-size:10px; color:#a0a0b0; margin-top:3px; }
+    .op-shift {
+      margin-left:auto; background:#fff8ec;
+      border:1px solid var(--border); border-radius:8px;
+      padding:5px 10px; text-align:center; flex-shrink:0;
+    }
+    .shift-name { font-size:11px; font-weight:700; color:var(--gold); }
+    .shift-time { font-size:10px; color:var(--gold-l); margin-top:1px; }
+
+    /* ── Pack Banner ── */
+    #packBanner {
+      display:none; position:fixed;
+      top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      z-index:999;
+      background:linear-gradient(135deg,#edfaf1,#d4f5e0);
+      border:3px solid #34c759;
+      border-radius:24px;
+      padding:30px 40px;
+      text-align:center;
+      box-shadow:0 20px 60px rgba(52,199,89,.35);
+      flex-direction:column; align-items:center; gap:8px;
+      width:85%; max-width:340px;
+    }
+    #packBanner .banner-icon  { font-size:56px; }
+    #packBanner .banner-title { font-size:26px; font-weight:800; color:#1a8f40; }
+    #packBanner .banner-sub   { font-size:14px; color:#4aaa70; }
+
+    @keyframes popIn {
+      0%   { opacity:0; transform:translate(-50%,-50%) scale(.6); }
+      70%  { transform:translate(-50%,-50%) scale(1.05); }
+      100% { opacity:1; transform:translate(-50%,-50%) scale(1); }
+    }
+
+    #overlay {
+      display:none; position:fixed; inset:0; z-index:998;
+      background:rgba(0,0,0,.25); backdrop-filter:blur(3px);
+    }
+
+    /* ── Table ── */
+    .table-wrap {
+      overflow-x:auto; border-radius:12px;
+      border:1px solid var(--border);
+      max-height:400px; overflow-y:auto;
+    }
+    .table-wrap::-webkit-scrollbar { width:4px; height:4px; }
+    .table-wrap::-webkit-scrollbar-thumb {
+      background:#e8c98a; border-radius:4px;
+    }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    thead th {
+      background:#fdf0d8; color:var(--gold);
+      font-size:10px; text-transform:uppercase; letter-spacing:1px;
+      padding:9px 10px; text-align:left;
+      border-bottom:1px solid var(--border);
+      position:sticky; top:0;
+    }
+    tbody td {
+      padding:9px 10px; border-bottom:1px solid #f5ece0;
+      color:#4a3f36;
+    }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:hover td { background:#fdf6ec; }
+
+    .badge {
+      display:inline-flex; align-items:center; gap:4px;
+      font-size:11px; font-weight:600;
+      padding:3px 8px; border-radius:8px;
+    }
+    .badge-running { background:#e8f8ed; color:#1a8f40; border:1px solid #a8e0bc; }
+    .badge-idle    { background:#f0f0f6; color:#6060a0; border:1px solid #c8c8e0; }
+
+    /* ── Update bar ── */
+    .update-bar {
+      background:#fdf0d8; border:1px solid var(--border);
+      border-radius:10px; padding:7px 14px;
+      font-size:11px; color:var(--sub);
+      display:flex; align-items:center; gap:7px;
+    }
+
+    /* ── Divider ── */
+    .divider { height:1px; background:#f0e8d8; margin:12px 0; }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size:10px; text-transform:uppercase;
+      letter-spacing:2px; color:var(--gold-l);
+      display:flex; align-items:center; gap:8px; margin-bottom:12px;
+    }
+    .section-title::after {
+      content:''; flex:1; height:1px;
+      background:linear-gradient(90deg,var(--border),transparent);
+    }
+
+    /* ── Bottom Navigation ── */
+    .bottom-nav {
+      position: fixed; bottom:0; left:0; right:0;
+      height: 65px;
+      padding-bottom: env(safe-area-inset-bottom);
+      background: #ffffff;
+      border-top: 1px solid var(--border);
+      display: flex;
+      box-shadow: 0 -4px 20px rgba(180,130,60,.10);
+      z-index: 200;
+    }
+
+    .nav-btn {
+      flex:1; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      gap:3px; border:none; background:transparent;
+      cursor:pointer; transition:all .2s;
+      color: var(--sub); padding:8px 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nav-btn .nav-icon { font-size:22px; transition:transform .2s; }
+    .nav-btn .nav-label { font-size:10px; font-weight:600; }
+
+    .nav-btn.active { color:var(--primary); }
+    .nav-btn.active .nav-icon { transform:scale(1.15); }
+
+    /* ── Stats Grid ── */
+    .stats-grid {
+      display:grid; grid-template-columns:1fr 1fr; gap:10px;
+    }
+    .stat-box {
+      background:#fdf6ec; border:1px solid var(--border);
+      border-radius:12px; padding:14px; text-align:center;
+    }
+    .stat-box .s-num   { font-size:26px; font-weight:800; color:var(--text); }
+    .stat-box .s-label { font-size:11px; color:var(--sub); margin-top:4px; }
+    .stat-box .s-unit  { font-size:11px; color:var(--gold-l); }
+  </style>
+</head>
+<body>
+
+<!-- Pack Banner -->
+<div id="overlay"></div>
+<div id="packBanner">
+  <div class="banner-icon">🎉</div>
+  <div class="banner-title">ทำได้แล้ว 1 แพ็ค!</div>
+  <div class="banner-sub" id="bannerPackNum">แพ็คที่ 1 · ครบ 50 ชิ้น</div>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo">🏭</div>
+    <div class="header-title">
+      <h1>MFG DASHBOARD</h1>
+      <p>ระบบติดตามการผลิต Real-time</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-pill">
+      <div class="dot dot-running" id="statusDot"></div>
+      <span class="live-text">LIVE</span>
+    </div>
+    <div class="clock-box">
+      <div class="time" id="clock">--:--:--</div>
+      <div class="date" id="dateDisplay">--</div>
+    </div>
+  </div>
+</header>
+
+<!-- Page Wrapper -->
+<div class="page-wrap">
+
+  <!-- ══ TAB: HOME ══ -->
+  <div class="tab-content" id="tab-home">
+    <div class="container">
+
+      <!-- Update bar -->
+      <div class="update-bar">
+        🕐 อัปเดตล่าสุด: <strong id="lastUpdate">รอข้อมูล...</strong>
+      </div>
+
+      <!-- Pack Counter Card -->
+      <div class="card">
+        <div class="card-title">📦 จำนวนที่ตรวจพบ (แพ็คปัจจุบัน)</div>
+        <div class="ring-wrap">
+          <div class="ring-outer">
+            <svg class="ring-svg" viewBox="0 0 100 100">
+              <circle class="ring-bg"   cx="50" cy="50" r="45"/>
+              <circle class="ring-fill" cx="50" cy="50" r="45" id="ringFill"/>
+            </svg>
+            <div class="ring-center">
+              <span class="ring-num" id="detectedCount">0</span>
+              <span class="ring-denom">/ 50</span>
+            </div>
+          </div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-info">
+            <span>ความคืบหน้าแพ็คนี้</span>
+            <span id="detectedPct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="s-num" id="completedPacks">0</div>
+          <div class="s-unit">แพ็ค</div>
+          <div class="s-label">🎁 แพ็คที่เสร็จแล้ว</div>
+        </div>
+        <div class="stat-box">
+          <div class="s-num" id="totalItems">0</div>
+          <div class="s-unit">ชิ้น</div>
+          <div class="s-label">📊 ผลิตทั้งหมด</div>
+        </div>
+      </div>
+
+      <!-- Temperature -->
+      <div class="card">
+        <div class="card-title">🌡️ อุณหภูมิเซ็นเซอร์</div>
+        <div class="kpi-num">
+          <span id="tempVal">--</span><span class="kpi-unit">°C</span>
+        </div>
+        <div class="kpi-sub">DHT11 · GPIO 4 · ESP32</div>
+        <div class="tag tag-orange" id="tempTag">⏳ รอข้อมูล</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ TAB: MACHINE ══ -->
