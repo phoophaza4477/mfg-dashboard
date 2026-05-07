@@ -1,4 +1,6 @@
-<!DOCTYPE html>
+ไม่ครบครับ! ขอโทษด้วย 🙏
+นี่โค้ดสมบูรณ์ 100% ครับ:
+html<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
@@ -20,10 +22,15 @@
     const app = initializeApp(firebaseConfig);
     const db  = getDatabase(app);
 
-    let currentCount     = 0;
-    let completedPacks   = 0;
+    let currentCount     = parseInt(localStorage.getItem("currentCount"))   || 0;
+    let completedPacks   = parseInt(localStorage.getItem("completedPacks")) || 0;
     const TARGET         = 50;
     let lastObjectStatus = null;
+
+    function saveToLocal() {
+      localStorage.setItem("currentCount",   currentCount);
+      localStorage.setItem("completedPacks", completedPacks);
+    }
 
     function handleDetection(objectStatus) {
       if (objectStatus === lastObjectStatus) return;
@@ -36,6 +43,7 @@
           showPackComplete();
         }
       }
+      saveToLocal();
       updateCountUI();
     }
 
@@ -79,12 +87,21 @@
       }
     }
 
+    window.resetAll = function () {
+      if (!confirm("ต้องการรีเซ็ตข้อมูลทั้งหมดใช่ไหม?")) return;
+      currentCount     = 0;
+      completedPacks   = 0;
+      lastObjectStatus = null;
+      localStorage.removeItem("currentCount");
+      localStorage.removeItem("completedPacks");
+      updateCountUI();
+    };
+
     onValue(ref(db, "/sensorData/latest"), (snap) => {
       const d = snap.val();
       if (!d) return;
 
-      const detected = d.objectStatus === "Detected";
-
+      const detected   = d.objectStatus === "Detected";
       const dot        = document.getElementById("statusDot");
       const statusText = document.getElementById("statusText");
       const statusCard = document.getElementById("statusCard");
@@ -114,9 +131,9 @@
       const tempTag = document.getElementById("tempTag");
       if (tv !== undefined) {
         const t = parseFloat(tv);
-        if (t > 35)      { tempTag.className="tag tag-red";    tempTag.textContent="🔥 อุณหภูมิสูง"; }
-        else if (t > 30) { tempTag.className="tag tag-orange"; tempTag.textContent="⚠️ ค่อนข้างร้อน"; }
-        else             { tempTag.className="tag tag-green";  tempTag.textContent="✓ อุณหภูมิปกติ"; }
+        if (t > 35)      { tempTag.className = "tag tag-red";    tempTag.textContent = "🔥 อุณหภูมิสูง"; }
+        else if (t > 30) { tempTag.className = "tag tag-orange"; tempTag.textContent = "⚠️ ค่อนข้างร้อน"; }
+        else             { tempTag.className = "tag tag-green";  tempTag.textContent = "✓ อุณหภูมิปกติ"; }
       }
 
       document.getElementById("lastUpdate").textContent = d.timestamp || "--";
@@ -151,8 +168,8 @@
         now.toLocaleTimeString("th-TH");
       document.getElementById("dateDisplay").textContent =
         now.toLocaleDateString("th-TH", {
-          weekday:"long", year:"numeric",
-          month:"long", day:"numeric"
+          weekday: "long", year: "numeric",
+          month: "long", day: "numeric"
         });
     }
     setInterval(updateClock, 1000);
@@ -170,7 +187,6 @@
       min-height: 100vh;
     }
 
-    /* ── Header ── */
     .header {
       background: linear-gradient(135deg,#fffdf7 0%,#fef3e2 100%);
       border-bottom: 2px solid #e8d5b0;
@@ -192,7 +208,6 @@
     }
     .header-title h1 { font-size:20px; font-weight:700; color:#8b5e1a; letter-spacing:1px; }
     .header-title p  { font-size:12px; color:#b08040; margin-top:2px; }
-
     .header-right { display:flex; align-items:center; gap:20px; }
     .live-pill {
       display:flex; align-items:center; gap:7px;
@@ -214,17 +229,15 @@
     .clock-box .time { font-size:22px; font-weight:700; color:#8b5e1a; }
     .clock-box .date { font-size:11px; color:#b08040; margin-top:2px; }
 
-    /* ── Layout ── */
     .container {
       max-width:1300px; margin:0 auto;
       padding:24px 28px;
       display:flex; flex-direction:column; gap:20px;
     }
-    .row  { display:grid; gap:20px; }
+    .row   { display:grid; gap:20px; }
     .col-3 { grid-template-columns:repeat(3,1fr); }
     .col-2 { grid-template-columns:1fr 1fr; }
 
-    /* ── Card ── */
     .card {
       background:#fff;
       border:1px solid #eddcbf;
@@ -244,7 +257,6 @@
       display:flex; align-items:center; gap:7px;
     }
 
-    /* ── KPI ── */
     .kpi-num  { font-size:48px; font-weight:800; color:#3d3530; line-height:1; }
     .kpi-unit { font-size:16px; color:#b08040; margin-left:4px; }
     .kpi-sub  { font-size:13px; color:#9a8070; margin-top:6px; }
@@ -258,7 +270,6 @@
     .tag-red    { background:#fdecea; color:#d93025; }
     .tag-orange { background:#fff3e0; color:#f57c00; }
 
-    /* ── Progress ── */
     .progress-wrap { margin-top:14px; }
     .progress-info {
       display:flex; justify-content:space-between;
@@ -275,17 +286,14 @@
       width:0%;
     }
 
-    /* ── Ring ── */
     .ring-wrap {
       display:flex; justify-content:center;
       align-items:center; margin:8px 0 14px;
     }
-    .ring-outer {
-      position:relative; width:100px; height:100px;
-    }
-    .ring-svg { transform:rotate(-90deg); }
-    .ring-bg   { fill:none; stroke:#f0e8d8; stroke-width:10; }
-    .ring-fill {
+    .ring-outer { position:relative; width:100px; height:100px; }
+    .ring-svg   { transform:rotate(-90deg); }
+    .ring-bg    { fill:none; stroke:#f0e8d8; stroke-width:10; }
+    .ring-fill  {
       fill:none; stroke:#f5a623; stroke-width:10;
       stroke-linecap:round;
       stroke-dasharray:283;
@@ -300,7 +308,6 @@
     .ring-num   { font-size:28px; font-weight:800; color:#3d3530; line-height:1; }
     .ring-denom { font-size:12px; color:#b08040; margin-top:2px; }
 
-    /* ── Pack Banner ── */
     #packBanner {
       display:none; position:fixed;
       top:50%; left:50%;
@@ -329,7 +336,6 @@
       background:rgba(0,0,0,.25); backdrop-filter:blur(3px);
     }
 
-    /* ── Status Card ── */
     .status-card {
       border-radius:16px; padding:24px 20px;
       border:2px solid; transition:all .4s; text-align:center;
@@ -351,7 +357,23 @@
     .status-label.idle    { color:#7070a0; }
     .status-sub { font-size:12px; color:#9a9aaa; margin-top:6px; }
 
-    /* ── Operator ── */
+    .reset-btn {
+      background:#fdecea; color:#d93025;
+      border:1px solid #f5c6c2;
+      border-radius:10px; padding:8px 18px;
+      font-size:12px; font-weight:700;
+      cursor:pointer; transition:all .2s;
+      white-space:nowrap;
+    }
+    .reset-btn:hover { background:#d93025; color:#fff; }
+
+    .saved-badge {
+      display:inline-flex; align-items:center; gap:5px;
+      font-size:11px; color:#2ea84a;
+      background:#e8f8ed; border:1px solid #a8e0bc;
+      border-radius:8px; padding:3px 10px;
+    }
+
     .operator-card {
       display:flex; align-items:center; gap:14px;
       background:#fdf6ec; border:1px solid #eddcbf;
@@ -374,7 +396,6 @@
     .shift-name { font-size:12px; font-weight:700; color:#8b5e1a; }
     .shift-time { font-size:11px; color:#b08040; margin-top:2px; }
 
-    /* ── Section title ── */
     .section-title {
       font-size:11px; text-transform:uppercase;
       letter-spacing:2px; color:#b08040;
@@ -385,7 +406,6 @@
       background:linear-gradient(90deg,#eddcbf,transparent);
     }
 
-    /* ── Table ── */
     .table-wrap {
       overflow-x:auto; border-radius:12px;
       border:1px solid #eddcbf;
@@ -415,24 +435,26 @@
     .badge-running { background:#e8f8ed; color:#1a8f40; border:1px solid #a8e0bc; }
     .badge-idle    { background:#f0f0f6; color:#6060a0; border:1px solid #c8c8e0; }
 
-    /* ── Update bar ── */
     .update-bar {
       background:#fdf0d8; border:1px solid #eddcbf;
       border-radius:10px; padding:8px 16px;
       font-size:12px; color:#9a8070;
-      display:flex; align-items:center; gap:8px;
+      display:flex; align-items:center; gap:8px; flex-wrap:wrap;
     }
 
     .divider { height:1px; background:#f0e8d8; margin:14px 0; }
 
     @media(max-width:1000px) { .col-3 { grid-template-columns:repeat(2,1fr); } }
-    @media(max-width:640px)  { .col-3,.col-2 { grid-template-columns:1fr; }
-                               .container { padding:16px; } }
+    @media(max-width:640px) {
+      .col-3,.col-2 { grid-template-columns:1fr; }
+      .container { padding:16px; }
+      .header { padding:12px 16px; }
+      .header-title h1 { font-size:15px; }
+    }
   </style>
 </head>
 <body>
 
-<!-- Pack Banner -->
 <div id="overlay"></div>
 <div id="packBanner">
   <div class="banner-icon">🎉</div>
@@ -440,7 +462,6 @@
   <div class="banner-sub" id="bannerPackNum">แพ็คที่ 1 · ครบ 50 ชิ้น</div>
 </div>
 
-<!-- Header -->
 <header class="header">
   <div class="header-left">
     <div class="logo">🏭</div>
@@ -463,15 +484,17 @@
 
 <main class="container">
 
-  <!-- Update bar -->
-  <div class="update-bar">
-    🕐 อัปเดตล่าสุด: <strong id="lastUpdate">รอข้อมูล...</strong>
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <div class="update-bar" style="flex:1;">
+      🕐 อัปเดตล่าสุด: <strong id="lastUpdate">รอข้อมูล...</strong>
+      &nbsp;·&nbsp;
+      <span class="saved-badge">💾 บันทึกอัตโนมัติ</span>
+    </div>
+    <button class="reset-btn" onclick="resetAll()">🗑️ รีเซ็ตข้อมูลทั้งหมด</button>
   </div>
 
-  <!-- Row 1: KPI -->
   <div class="row col-3">
 
-    <!-- Pack Counter -->
     <div class="card">
       <div class="card-title">📦 จำนวนที่ตรวจพบ (แพ็คปัจจุบัน)</div>
       <div class="ring-wrap">
@@ -497,7 +520,6 @@
       </div>
     </div>
 
-    <!-- Completed Packs -->
     <div class="card">
       <div class="card-title">🎁 แพ็คที่เสร็จแล้ว</div>
       <div class="kpi-num">
@@ -512,10 +534,9 @@
       <div style="font-size:13px; color:#9a8070;">
         เป้าหมาย <strong style="color:#3d3530">50 ชิ้น</strong> / แพ็ค
       </div>
-      <div class="tag tag-green" style="margin-top:12px;">✓ กำลังดำเนินการผลิต</div>
+      <div class="tag tag-green" style="margin-top:12px;">💾 บันทึกข้อมูลอัตโนมัติ</div>
     </div>
 
-    <!-- Temperature -->
     <div class="card">
       <div class="card-title">🌡️ อุณหภูมิเซ็นเซอร์</div>
       <div class="kpi-num">
@@ -528,10 +549,8 @@
 
   </div>
 
-  <!-- Row 2: Machine + Operator -->
   <div class="row col-2">
 
-    <!-- Machine Status -->
     <div class="card">
       <div class="card-title">⚙️ สถานะเครื่องจักร</div>
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
@@ -552,7 +571,6 @@
       </div>
     </div>
 
-    <!-- Operator -->
     <div class="card">
       <div class="card-title">👤 ผู้ควบคุมเครื่องจักร</div>
       <div style="display:flex; flex-direction:column; gap:12px;">
@@ -562,9 +580,7 @@
           <div style="flex:1;">
             <div class="op-name">สมชาย มีสุข</div>
             <div class="op-role">Senior Operator · Line A</div>
-            <div style="font-size:11px; color:#34c759; margin-top:4px;">
-              ● กำลังทำงาน
-            </div>
+            <div style="font-size:11px; color:#34c759; margin-top:4px;">● กำลังทำงาน</div>
           </div>
           <div class="op-shift">
             <div class="shift-name">กะเช้า</div>
@@ -573,14 +589,11 @@
         </div>
 
         <div class="operator-card" style="opacity:.6;">
-          <div class="avatar"
-            style="background:linear-gradient(135deg,#a0a0b0,#c0c0d0);">ว</div>
+          <div class="avatar" style="background:linear-gradient(135deg,#a0a0b0,#c0c0d0);">ว</div>
           <div style="flex:1;">
             <div class="op-name">วิไล ทองดี</div>
             <div class="op-role">Operator · Line A</div>
-            <div style="font-size:11px; color:#a0a0b0; margin-top:4px;">
-              ● กะบ่าย (13:00)
-            </div>
+            <div style="font-size:11px; color:#a0a0b0; margin-top:4px;">● กะบ่าย (13:00)</div>
           </div>
           <div class="op-shift">
             <div class="shift-name">กะบ่าย</div>
@@ -593,7 +606,6 @@
 
   </div>
 
-  <!-- Row 3: History -->
   <div class="card">
     <div class="section-title">📋 ประวัติการทำงานของเครื่องจักร (20 รายการล่าสุด)</div>
     <div class="table-wrap scrollable">
@@ -608,8 +620,7 @@
         </thead>
         <tbody id="historyBody">
           <tr>
-            <td colspan="4"
-              style="text-align:center; color:#b08040; padding:24px;">
+            <td colspan="4" style="text-align:center; color:#b08040; padding:24px;">
               ⏳ กำลังโหลดข้อมูลจาก Firebase...
             </td>
           </tr>
